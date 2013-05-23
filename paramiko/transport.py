@@ -1092,6 +1092,19 @@ class Transport (threading.Thread):
             return None
         return self.auth_handler.get_username()
 
+    def auth_hostbased(self, username, hostname, host_pub_key, host_priv_key):
+        """
+        Use hostbased auth
+        """
+        self._log(DEBUG,"paramiko.transport hostbased = True")
+
+        if (not self.active) or (not self.initial_kex_done):
+            raise SSHException('No existing session')
+        my_event = threading.Event()
+        self.auth_handler = AuthHandler(self)
+        self.auth_handler.auth_hostbased(username, hostname, host_pub_key, host_priv_key, my_event)
+        return self.auth_handler.wait_for_response(my_event)
+
     def auth_none(self, username):
         """
         Try to authenticate to the server using no authentication at all.
@@ -1439,7 +1452,7 @@ class Transport (threading.Thread):
                 break
             self.clear_to_send_lock.release()
             if time.time() > start + self.clear_to_send_timeout:
-                raise SSHException('Key-exchange timed out waiting for key negotiation')
+              raise SSHException('Key-exchange timed out waiting for key negotiation')
         try:
             self._send_message(data)
         finally:

@@ -21,6 +21,7 @@ L{SSHClient}.
 """
 
 from binascii import hexlify
+import base64
 import getpass
 import os
 import socket
@@ -186,13 +187,8 @@ class SSHClient (object):
 
         @raise IOError: if the file could not be written
         """
-
-        # update local host keys from file (in case other SSH clients
-        # have written to the known_hosts file meanwhile.
-        if self.known_hosts is not None:
-            self.load_host_keys(self.known_hosts)
-
         f = open(filename, 'w')
+        f.write('# SSH host keys collected by paramiko\n')
         for hostname, keys in self._host_keys.iteritems():
             for keytype, key in keys.iteritems():
                 f.write('%s %s %s\n' % (hostname, keytype, key.get_base64()))
@@ -233,7 +229,7 @@ class SSHClient (object):
 
     def connect(self, hostname, port=SSH_PORT, username=None, password=None, pkey=None,
                 key_filename=None, timeout=None, allow_agent=True, look_for_keys=True,
-                compress=False, sock=None):
+                compress=False, sock=None, hostbased=False):
         """
         Connect to an SSH server and authenticate to it.  The server's host key
         is checked against the system host keys (see L{load_system_host_keys})
@@ -339,7 +335,7 @@ class SSHClient (object):
             key_filenames = [ key_filename ]
         else:
             key_filenames = key_filename
-        self._auth(username, password, pkey, key_filenames, allow_agent, look_for_keys)
+        self._auth(username, password, pkey, key_filenames, allow_agent, look_for_keys, hostbased)
 
     def close(self):
         """
@@ -429,7 +425,7 @@ class SSHClient (object):
         """
         return self._transport
 
-    def _auth(self, username, password, pkey, key_filenames, allow_agent, look_for_keys):
+    def _auth(self, username, password, pkey, key_filenames, allow_agent, look_for_keys, hostbased):
         """
         Try, in order:
 
@@ -518,6 +514,33 @@ class SSHClient (object):
                     saved_exception = e
                 except IOError, e:
                     saved_exception = e
+
+        if hostbased:
+            self._log(DEBUG, "paramiko.client hostbased = True")
+            try:
+                hostname = socket.getfqdn()
+
+                # try to use rsa first, fallback to dsa, or fail
+                private_system_rsa_key = os.path.expanduser('/etc/ssh/ssh_host_rsa_key')
+                private_system_dsa_key = os.path.expanduser('/etc/ssh/ssh_host_dsa_key')
+                if os.path.isfile(private_system_rsa_key):
+                    keytype = "ssh-rsa"
+                    host_priv_key = RSAKey.from_private_key_file(private_system_rsa_key)
+                elif os.path.isfile(private_system_dsa_key):
+                    keytype = "ssh-dsa"
+                    host_priv_key = RSAKey.from_private_key_file(private_system_dsa_key)
+                else:
+                    print "No system private hostkeys, or incorrect privs."
+                    sys.exit(-1)
+
+                # adds the system host keys to the self.host_keys list
+                our_system_host_keys = self.load_host_keys('/etc/ssh/ssh_known_hosts')
+                host_pub_key = self.get_host_keys()[hostname][keytype]
+                self._transport.auth_hostbased(username, hostname, host_pub_key, host_priv_key)
+                return
+            except SSHException, e:
+                print e
+                saved_exception = e
 
         if password is not None:
             try:

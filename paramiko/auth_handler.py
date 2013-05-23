@@ -45,6 +45,7 @@ class AuthHandler (object):
         self.authenticated = False
         self.auth_event = None
         self.auth_method = ''
+        self.hostname = None
         self.password = None
         self.private_key = None
         self.interactive_handler = None
@@ -61,6 +62,20 @@ class AuthHandler (object):
             return self.auth_username
         else:
             return self.username
+    
+    def auth_hostbased(self, username, hostname, host_pub_key, host_priv_key, event):
+        self.transport._log(DEBUG, "paramiko.authhandler hostbased = True")
+        self.transport.lock.acquire()
+        try:
+            self.auth_event = event
+            self.auth_method = 'hostbased'
+            self.hostname = hostname
+            self.host_public_key = host_pub_key
+            self.host_private_key = host_priv_key
+            self.username = username
+            self._request_auth()
+        finally:
+            self.transport.lock.release()
 
     def auth_none(self, username, event):
         self.transport.lock.acquire()
@@ -153,6 +168,21 @@ class AuthHandler (object):
         m.add_string(str(key))
         return str(m)
 
+
+    # make this new method.
+    def _get_hostbased_session_blob(self, key, service, username, hostname):
+        m = Message()
+        m.add_string(self.transport.session_id)
+        m.add_byte(chr(MSG_USERAUTH_REQUEST))
+        m.add_string(username)
+        m.add_string(service)
+        m.add_string('hostbased')
+        m.add_string(key.get_name())
+        m.add_string(str(key))
+        m.add_string(hostname)
+        m.add_string(username)
+        return str(m) 
+
     def wait_for_response(self, event):
         while True:
             event.wait(0.1)
@@ -211,6 +241,16 @@ class AuthHandler (object):
             elif self.auth_method == 'keyboard-interactive':
                 m.add_string('')
                 m.add_string(self.submethods)
+            elif self.auth_method =='hostbased':
+                self.transport._log(DEBUG, 'paramiko.authhandler hostbased = True')
+                m.add_string(self.host_public_key.get_name())
+                m.add_string(str(self.host_private_key))
+                m.add_string(self.hostname)
+                m.add_string(self.username)
+                blob = self._get_hostbased_session_blob(self.host_private_key, 'ssh-connection', self.username, self.hostname)
+                sig = self.host_private_key.sign_ssh_data(self.transport.rng, blob)
+                m.add_string(str(sig))
+                #print self.host_public_key.verify_ssh_sig(blob, m)
             elif self.auth_method == 'none':
                 pass
             else:
