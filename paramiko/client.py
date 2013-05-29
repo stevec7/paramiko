@@ -273,6 +273,8 @@ class SSHClient (object):
         @param compress: set to True to turn on compression
         @type compress: bool
         @param sock: an open socket or socket-like object (such as a
+        @param hostbased: use hostbased authentication
+        @type hostbased: bool
             L{Channel}) to use for communication to the target host
         @type sock: socket
 
@@ -432,6 +434,7 @@ class SSHClient (object):
             - The key passed in, if one was passed in.
             - Any key we can find through an SSH agent (if allowed).
             - Any "id_rsa" or "id_dsa" key discoverable in ~/.ssh/ (if allowed).
+            - host based auth, if @param hostbased = True
             - Plain username/password auth, if a password was given.
 
         (The password might be needed to unlock a private key, or for
@@ -516,22 +519,21 @@ class SSHClient (object):
                     saved_exception = e
 
         if hostbased:
-            self._log(DEBUG, "paramiko.client hostbased = True")
             try:
                 hostname = socket.getfqdn()
+                self._log(DEBUG, 'Trying hostbased auth, client %s' % hostname)
 
                 # try to use rsa first, fallback to dsa, or fail
                 private_system_rsa_key = os.path.expanduser('/etc/ssh/ssh_host_rsa_key')
                 private_system_dsa_key = os.path.expanduser('/etc/ssh/ssh_host_dsa_key')
                 if os.path.isfile(private_system_rsa_key):
-                    keytype = "ssh-rsa"
+                    keytype = 'ssh-rsa'
                     host_priv_key = RSAKey.from_private_key_file(private_system_rsa_key)
                 elif os.path.isfile(private_system_dsa_key):
-                    keytype = "ssh-dsa"
+                    keytype = 'ssh-dsa'
                     host_priv_key = RSAKey.from_private_key_file(private_system_dsa_key)
                 else:
-                    print "No system private hostkeys, or incorrect privs."
-                    sys.exit(-1)
+                    raise SSHException('No system private hostkeys, or keys unreadable.')
 
                 # adds the system host keys to the self.host_keys list
                 our_system_host_keys = self.load_host_keys('/etc/ssh/ssh_known_hosts')
@@ -539,7 +541,6 @@ class SSHClient (object):
                 self._transport.auth_hostbased(username, hostname, host_pub_key, host_priv_key)
                 return
             except SSHException, e:
-                print e
                 saved_exception = e
 
         if password is not None:

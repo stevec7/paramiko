@@ -1094,7 +1094,17 @@ class Transport (threading.Thread):
 
     def auth_hostbased(self, username, hostname, host_pub_key, host_priv_key):
         """
-        Use hostbased auth
+        Use hostbased auth. 
+        @param username: the username requesting the session. 
+        @type username: string
+        @param hostname: fqdn of the client 
+        @type hostname: string
+        @param host_pub_key: the public rsa or dsa system hostkey, normally 
+            found via /etc/ssh/ssh_host_rsa,dsa)_key.pub
+        @type host_pub_key: string
+        @param host_priv_key: the system private key of the host, usually 
+            found in /etc/ssh/ssh_host_{rsa,dsa}
+        @type host_priv_key: string
         """
         self._log(DEBUG,"paramiko.transport hostbased = True")
 

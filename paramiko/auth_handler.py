@@ -64,7 +64,6 @@ class AuthHandler (object):
             return self.username
     
     def auth_hostbased(self, username, hostname, host_pub_key, host_priv_key, event):
-        self.transport._log(DEBUG, "paramiko.authhandler hostbased = True")
         self.transport.lock.acquire()
         try:
             self.auth_event = event
@@ -168,8 +167,6 @@ class AuthHandler (object):
         m.add_string(str(key))
         return str(m)
 
-
-    # make this new method.
     def _get_hostbased_session_blob(self, key, service, username, hostname):
         m = Message()
         m.add_string(self.transport.session_id)
@@ -242,7 +239,6 @@ class AuthHandler (object):
                 m.add_string('')
                 m.add_string(self.submethods)
             elif self.auth_method =='hostbased':
-                self.transport._log(DEBUG, 'paramiko.authhandler hostbased = True')
                 m.add_string(self.host_public_key.get_name())
                 m.add_string(str(self.host_private_key))
                 m.add_string(self.hostname)
@@ -250,7 +246,6 @@ class AuthHandler (object):
                 blob = self._get_hostbased_session_blob(self.host_private_key, 'ssh-connection', self.username, self.hostname)
                 sig = self.host_private_key.sign_ssh_data(self.transport.rng, blob)
                 m.add_string(str(sig))
-                #print self.host_public_key.verify_ssh_sig(blob, m)
             elif self.auth_method == 'none':
                 pass
             else:
